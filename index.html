@@ -1,78 +1,279 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <title>iOS HTTP Method Test</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta charset="UTF-8">
+  <title>Firebase 4 人指示燈測試</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Firebase compat 版本 -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
   <style>
-    body { font-family: sans-serif; padding: 20px; }
-    button { padding: 10px 20px; margin: 10px 0; font-size: 16px; cursor: pointer; }
-    pre { background: #f0f0f0; padding: 10px; overflow-x: auto; }
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f5f5f5;
+      margin: 0;
+      padding: 20px;
+    }
+    h1 {
+      font-size: 20px;
+      margin-bottom: 10px;
+    }
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 16px;
+      max-width: 480px;
+      margin: 0 auto 16px auto;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.08);
+    }
+    .role-buttons button {
+      margin: 4px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      background: #fff;
+      cursor: pointer;
+    }
+    .role-buttons button.selected {
+      background: #1976d2;
+      color: #fff;
+      border-color: #1976d2;
+    }
+    #game-screen {
+      display: none;
+    }
+    #toggle-button {
+      padding: 10px 16px;
+      border-radius: 6px;
+      border: none;
+      background: #388e3c;
+      color: #fff;
+      cursor: pointer;
+      font-size: 14px;
+    }
+    #toggle-button.off {
+      background: #b71c1c;
+    }
+    .players-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 8px;
+    }
+    .player-box {
+      border-radius: 6px;
+      padding: 8px;
+      background: #fafafa;
+      border: 1px solid #ddd;
+      font-size: 13px;
+    }
+    .player-name {
+      font-weight: 600;
+      margin-bottom: 4px;
+    }
+    .status-line {
+      margin: 2px 0;
+    }
+    .badge {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 999px;
+      font-size: 11px;
+      color: #fff;
+    }
+    .badge-joined {
+      background: #2e7d32;
+    }
+    .badge-not-joined {
+      background: #757575;
+    }
+    .badge-on {
+      background: #f9a825;
+    }
+    .badge-off {
+      background: #616161;
+    }
   </style>
 </head>
 <body>
-  <h1>iOS HTTP Method Test</h1>
-  <p>測試 GET / POST / PATCH 是否在 iOS (Safari, LIFF) 中可用</p>
+  <!-- 選角色畫面 -->
+  <div id="setup-screen" class="card">
+    <h1>選擇玩家角色（PLAY1～PLAY4）</h1>
+    <p>開兩個瀏覽器 / 手機，選不同角色，就可以看到彼此指示燈同步。</p>
+    <div class="role-buttons">
+      <button onclick="selectPlayer('PLAY1')" id="btn-PLAY1">PLAY1</button>
+      <button onclick="selectPlayer('PLAY2')" id="btn-PLAY2">PLAY2</button>
+      <button onclick="selectPlayer('PLAY3')" id="btn-PLAY3">PLAY3</button>
+      <button onclick="selectPlayer('PLAY4')" id="btn-PLAY4">PLAY4</button>
+    </div>
+    <p style="font-size:12px;color:#666;margin-top:8px;">
+      ※ 測試前請先在 Firebase Realtime Database 將 rules 設為：<br>
+      <code>{ "rules": { ".read": true, ".write": true } }</code>
+    </p>
+  </div>
 
-  <button id="get">🔍 Test GET Firestore</button><br />
-  <button id="post">📤 Test POST</button><br />
-  <button id="patch">✏️ Test PATCH</button><br />
+  <!-- 遊戲畫面 -->
+  <div id="game-screen" class="card">
+    <h1>指示燈同步測試</h1>
+    <p>目前身分：<strong id="current-player-label">-</strong></p>
+    <button id="toggle-button" onclick="toggleLight()" disabled>開啟指示燈</button>
 
-  <h3>Result:</h3>
-  <pre id="result">尚無測試結果，請點擊按鈕開始測試。</pre>
+    <h2 style="font-size:16px;margin-top:16px;">四位玩家狀態</h2>
+    <div class="players-grid" id="players-grid">
+      <div class="player-box" data-player-id="PLAY1">
+        <div class="player-name">PLAY1</div>
+        <div class="status-line">加入：<span class="joined-text">未加入</span> <span class="joined-badge badge badge-not-joined">未加入</span></div>
+        <div class="status-line">指示燈：<span class="light-text">關</span> <span class="light-badge badge badge-off">OFF</span></div>
+      </div>
+      <div class="player-box" data-player-id="PLAY2">
+        <div class="player-name">PLAY2</div>
+        <div class="status-line">加入：<span class="joined-text">未加入</span> <span class="joined-badge badge badge-not-joined">未加入</span></div>
+        <div class="status-line">指示燈：<span class="light-text">關</span> <span class="light-badge badge badge-off">OFF</span></div>
+      </div>
+      <div class="player-box" data-player-id="PLAY3">
+        <div class="player-name">PLAY3</div>
+        <div class="status-line">加入：<span class="joined-text">未加入</span> <span class="joined-badge badge badge-not-joined">未加入</span></div>
+        <div class="status-line">指示燈：<span class="light-text">關</span> <span class="light-badge badge badge-off">OFF</span></div>
+      </div>
+      <div class="player-box" data-player-id="PLAY4">
+        <div class="player-name">PLAY4</div>
+        <div class="status-line">加入：<span class="joined-text">未加入</span> <span class="joined-badge badge badge-not-joined">未加入</span></div>
+        <div class="status-line">指示燈：<span class="light-text">關</span> <span class="light-badge badge badge-off">OFF</span></div>
+      </div>
+    </div>
+  </div>
 
   <script>
-    const resultBox = document.getElementById("result");
+    // 🔧 把這裡改成你的 Firebase 設定 -----------------
+    const firebaseConfig = {
+    apiKey: "AIzaSyCK7sNXMML-IA_ZjaiAOXyN8ftCrLn39uA",
+    authDomain: "theendoftheworld.firebaseapp.com",
+      databaseURL: "https://theendoftheworld.asia-southeast1.firebasedatabase.app",
+    projectId: "theendoftheworld",
+    storageBucket: "theendoftheworld.appspot.com",
+    messagingSenderId: "333484279077",
+    appId: "1:333484279077:web:53ddd6067e1f4b45c3c6cc"
+    };
+    // ------------------------------------------------
 
-    function log(msg) {
-      resultBox.textContent = msg;
+    // 初始化 Firebase
+    firebase.initializeApp(firebaseConfig);
+    const db = firebase.database();
+    const playersRef = db.ref("demoGame/players");
+
+    // 當前使用中的角色
+    let currentPlayerId = null;
+    let currentPlayerRef = null;
+    let myLightOn = false;
+
+    // 選擇角色
+    function selectPlayer(playerId) {
+      if (!playerId) return;
+
+      currentPlayerId = playerId;
+      document.getElementById("current-player-label").textContent = playerId;
+
+      // 按鈕樣式更新
+      ["PLAY1","PLAY2","PLAY3","PLAY4"].forEach(id => {
+        const btn = document.getElementById("btn-" + id);
+        if (btn) {
+          btn.classList.toggle("selected", id === playerId);
+        }
+      });
+
+      // 切換畫面
+      document.getElementById("setup-screen").style.display = "none";
+      document.getElementById("game-screen").style.display = "block";
+
+      // 指向自己的玩家節點
+      currentPlayerRef = playersRef.child(playerId);
+
+      // 註冊 onDisconnect：離線時設定為未加入 & 指示燈關
+      currentPlayerRef.onDisconnect().set({
+        joined: false,
+        light: false,
+        updatedAt: Date.now()
+      });
+
+      // 正式寫入「已加入，燈關」
+      currentPlayerRef.set({
+        joined: true,
+        light: false,
+        updatedAt: Date.now()
+      });
+
+      myLightOn = false;
+      updateToggleButtonUI();
+
+      // 讓按鈕可用
+      document.getElementById("toggle-button").disabled = false;
     }
 
-    // Firestore GET 測試
-    document.getElementById("get").onclick = async () => {
-      log("🔍 Sending GET to Firestore...");
-      try {
-        const res = await fetch(
-          "https://firestore.googleapis.com/v1/projects/theendoftheworld/databases/(default)/documents/playerdata/0101aOPTNU"
-        );
-        const data = await res.json();
-        log("📥 GET success:\n" + JSON.stringify(data, null, 2));
-      } catch (err) {
-        log("❌ GET failed: " + err);
+    // 切換自己的指示燈
+    function toggleLight() {
+      if (!currentPlayerRef) {
+        alert("請先選擇角色");
+        return;
       }
-    };
+      myLightOn = !myLightOn;
+      currentPlayerRef.update({
+        joined: true,
+        light: myLightOn,
+        updatedAt: Date.now()
+      });
+      updateToggleButtonUI();
+    }
 
-    // POST 測試（使用 httpbin）
-    document.getElementById("post").onclick = async () => {
-      log("📤 Sending POST to httpbin...");
-      try {
-        const res = await fetch("https://httpbin.org/post", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ test: "Hello from iOS" }),
-        });
-        const data = await res.json();
-        log("📤 POST success:\n" + JSON.stringify(data, null, 2));
-      } catch (err) {
-        log("❌ POST failed: " + err);
-      }
-    };
+    // 更新畫面上自己的按鈕文字 / 顏色
+    function updateToggleButtonUI() {
+      const btn = document.getElementById("toggle-button");
+      if (!btn) return;
 
-    // PATCH 測試（使用 httpbin）
-    document.getElementById("patch").onclick = async () => {
-      log("✏️ Sending PATCH to httpbin...");
-      try {
-        const res = await fetch("https://httpbin.org/patch", {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ update: "Testing PATCH" }),
-        });
-        const data = await res.json();
-        log("✏️ PATCH success:\n" + JSON.stringify(data, null, 2));
-      } catch (err) {
-        log("❌ PATCH failed: " + err);
+      if (myLightOn) {
+        btn.textContent = "關閉指示燈";
+        btn.classList.add("off");
+      } else {
+        btn.textContent = "開啟指示燈";
+        btn.classList.remove("off");
       }
-    };
+    }
+
+    // 監聽所有玩家狀態
+    playersRef.on("value", snapshot => {
+      const players = snapshot.val() || {};
+      // 更新四個玩家的格子
+      ["PLAY1","PLAY2","PLAY3","PLAY4"].forEach(id => {
+        const box = document.querySelector(`.player-box[data-player-id="${id}"]`);
+        if (!box) return;
+
+        const data = players[id] || { joined: false, light: false };
+        const joinedText = box.querySelector(".joined-text");
+        const joinedBadge = box.querySelector(".joined-badge");
+        const lightText = box.querySelector(".light-text");
+        const lightBadge = box.querySelector(".light-badge");
+
+        const joined = !!data.joined;
+        const light = !!data.light;
+
+        // 加入狀態
+        joinedText.textContent = joined ? "已加入" : "未加入";
+        joinedBadge.textContent = joined ? "已加入" : "未加入";
+        joinedBadge.classList.toggle("badge-joined", joined);
+        joinedBadge.classList.toggle("badge-not-joined", !joined);
+
+        // 指示燈狀態
+        lightText.textContent = light ? "亮" : "關";
+        lightBadge.textContent = light ? "ON" : "OFF";
+        lightBadge.classList.toggle("badge-on", light);
+        lightBadge.classList.toggle("badge-off", !light);
+
+        // 若是自己，順便同步 myLightOn（避免多開視窗時不同步）
+        if (id === currentPlayerId) {
+          myLightOn = light;
+          updateToggleButtonUI();
+        }
+      });
+    });
   </script>
 </body>
 </html>
